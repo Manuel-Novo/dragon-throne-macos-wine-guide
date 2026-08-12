@@ -19,8 +19,9 @@ export PATH="$WINE_APP/Contents/Resources/wine/bin:$PATH"
 wine reg add 'HKCU\Software\Wine\Direct3D' /v renderer /t REG_SZ /d 'vulkan' /f >/dev/null 2>&1
 
 # ddraw=n,b loads local cnc-ddraw first (use ddraw=b if you skipped the cnc-ddraw step)
-export WINEDLLOVERRIDES="ddraw=n,b;winmm=b;mmdevapi=d;dsound=b"
-export WINEDEBUG=-all
+export WINEDLLOVERRIDES="ddraw=n,b;winmm=b"     # audio enabled
+export WINEDEBUG=+mmdevapi,+coreaudio           # anti-race brake for sound — do not remove
+wine reg add 'HKCU\Software\Wine\DirectSound' /v HardwareAcceleration /t REG_SZ /d 'Emulation' /f >/dev/null 2>&1
 
 cd "$GAME_DIR"
-exec wine dragonthrone.exe
+exec wine dragonthrone.exe > /dev/null 2>&1

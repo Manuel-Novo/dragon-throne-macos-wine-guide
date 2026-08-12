@@ -5,9 +5,9 @@ A working recipe to run the 2001 RTS **Dragon Throne: Battle of Red Cliffs**
 **Apple Silicon Mac** using only **free, open‑source software** — no CrossOver
 subscription, no virtual machine, no cracks.
 
-> ✅ **Tested working:** Apple **M1**, **macOS 26**, August 2026. The game reaches its
-> menu and plays (see the three fixes below). The one known limitation today is **no
-> sound** (explained at the end).
+> ✅ **Tested working — with picture AND sound:** Apple **M1**, **macOS 26**, August 2026.
+> Sound needs one extra (unusual) trick explained below: a targeted `WINEDEBUG` "brake"
+> that defuses a thread race in Wine 11.0's audio init.
 
 ![status](https://img.shields.io/badge/status-playable-brightgreen)
 ![cost](https://img.shields.io/badge/cost-%E2%82%AC0-blue)
@@ -106,10 +106,11 @@ Use [`play.sh`](play.sh) (edit the two paths at the top), or run directly:
 ```bash
 export WINEPREFIX="$HOME/DragonThrone/prefix"
 export PATH="/Applications/Wine Stable.app/Contents/Resources/wine/bin:$PATH"
-export WINEDLLOVERRIDES="ddraw=n,b;winmm=b;mmdevapi=d;dsound=b"
-export WINEDEBUG=-all
+# audio ENABLED + the anti-race "brake" (see Sound section below):
+export WINEDLLOVERRIDES="ddraw=n,b;winmm=b"
+export WINEDEBUG=+mmdevapi,+coreaudio
 cd "$HOME/DragonThrone/game"
-wine dragonthrone.exe
+wine dragonthrone.exe > /dev/null 2>&1
 ```
 
 > `ddraw=n,b` tells Wine to load the local **cnc-ddraw** first. If you skip Step 4, use
@@ -135,24 +136,41 @@ from there.
 
 ---
 
+## Sound: the thread-race brake (how and why)
+
+Wine **stable 11.0** crashes a few seconds after launch with
+`Assertion failed: !status … mmdevapi_private.h` — but only *sometimes*: under `WINEDEBUG`
+tracing it never crashes. It's a **thread race in the audio init**, and the logging
+overhead serialises it. So the workaround is simply to keep targeted tracing on the two
+audio channels and throw the output away:
+
+```bash
+export WINEDEBUG=+mmdevapi,+coreaudio   # the brake — do not remove
+wine dragonthrone.exe > /dev/null 2>&1
+```
+
+One channel (`+mmdevapi`) is not enough (death around ~60 s); both channels held a
+3-minute stress run at ~20 % CPU with music and SFX playing. Also set
+`HKCU\Software\Wine\DirectSound` → `HardwareAcceleration` = `Emulation` in the prefix.
+
+Build matrix that led here (Aug 2026):
+
+| Gcenx build | Display | Audio |
+|---|---|---|
+| stable 11.0 | ✅ works (cnc-ddraw GDI windowed) | ⚠️ race crash → fixed by the brake above |
+| staging 11.15 | ❌ blank window, ~99% CPU spin | ✅ fixed upstream |
+| devel 11.15 | ❌ same blank+spin → an **upstream 11.15 display regression** | ✅ fixed upstream |
+
+(We also tried grafting 11.15's audio modules into 11.0 — doesn't work, the
+ntdll↔unixlib interface changed between the two. When a build ships with both the 11.15
+audio fix and without the display regression, drop the `WINEDEBUG` brake entirely.)
+
 ## Known limitations
 
-- **No sound** yet. Disabling `mmdevapi` is what keeps the game alive on Wine **stable 11.0**.
-  We tested the whole free build matrix (Aug 2026):
-  | Gcenx build | Display | Audio |
-  |---|---|---|
-  | stable 11.0 | ✅ works (cnc-ddraw GDI windowed) | ❌ `mmdevapi` assertion crash |
-  | staging 11.15 | ❌ blank window, ~99% CPU spin | ✅ fixed (with `DirectSound HardwareAcceleration=Emulation`) |
-  | devel 11.15 | ❌ same blank+spin → an **upstream 11.15 display regression**, not a staging patch | ✅ fixed |
-  So today you choose: **picture without sound (11.0)** — this guide's default — or neither.
-  When a build ships with the 11.15 audio fix but without the display regression, sound
-  should just work by removing `mmdevapi=d;dsound=b` from the overrides and setting
-  `HKCU\Software\Wine\DirectSound` → `HardwareAcceleration`=`Emulation`. PRs welcome.
 - **Renderer notes (stable 11.0):** cnc-ddraw `renderer=gdi` + windowed is the only mode
   that displays. `opengl` = black window, `direct3d9` = crash, GDI fullscreen = unscaled
   and choppy. For a bigger picture, set **1024×768 in the in-game OPTIONS** menu instead.
-- Windowed 640×480 by default (the game's native resolution). cnc-ddraw can scale/borderless
-  — tweak its `ddraw.ini`.
+- Windowed 640×480 by default (the game's native resolution).
 - Tested on **M1 / macOS 26**. Other chips/OS versions should behave the same but aren't
   independently confirmed here.
 
