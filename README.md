@@ -137,9 +137,20 @@ from there.
 
 ## Known limitations
 
-- **No sound** yet. Disabling `mmdevapi` is what keeps the game alive on the tested build.
-  If you find an audio configuration that doesn't assert (a different Wine build, a
-  GStreamer setup, etc.), please open a PR.
+- **No sound** yet. Disabling `mmdevapi` is what keeps the game alive on Wine **stable 11.0**.
+  We tested the whole free build matrix (Aug 2026):
+  | Gcenx build | Display | Audio |
+  |---|---|---|
+  | stable 11.0 | ✅ works (cnc-ddraw GDI windowed) | ❌ `mmdevapi` assertion crash |
+  | staging 11.15 | ❌ blank window, ~99% CPU spin | ✅ fixed (with `DirectSound HardwareAcceleration=Emulation`) |
+  | devel 11.15 | ❌ same blank+spin → an **upstream 11.15 display regression**, not a staging patch | ✅ fixed |
+  So today you choose: **picture without sound (11.0)** — this guide's default — or neither.
+  When a build ships with the 11.15 audio fix but without the display regression, sound
+  should just work by removing `mmdevapi=d;dsound=b` from the overrides and setting
+  `HKCU\Software\Wine\DirectSound` → `HardwareAcceleration`=`Emulation`. PRs welcome.
+- **Renderer notes (stable 11.0):** cnc-ddraw `renderer=gdi` + windowed is the only mode
+  that displays. `opengl` = black window, `direct3d9` = crash, GDI fullscreen = unscaled
+  and choppy. For a bigger picture, set **1024×768 in the in-game OPTIONS** menu instead.
 - Windowed 640×480 by default (the game's native resolution). cnc-ddraw can scale/borderless
   — tweak its `ddraw.ini`.
 - Tested on **M1 / macOS 26**. Other chips/OS versions should behave the same but aren't
