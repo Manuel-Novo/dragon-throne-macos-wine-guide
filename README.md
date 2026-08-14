@@ -116,7 +116,28 @@ wine dragonthrone.exe > /dev/null 2>&1
 > `ddraw=n,b` tells Wine to load the local **cnc-ddraw** first. If you skip Step 4, use
 > `ddraw=b` instead (Wine's builtin, rendered via the Vulkan setting from Step 3).
 
-## Step 6 — Skip the intro
+## Step 6 — Fix the language file (or the game crash-loops!)
+
+**This one is easy to miss and looks like a rendering bug.** On a *fresh* Wine prefix the
+game may try to load a language file that isn't shipped (e.g. Simplified Chinese
+`DATA\CHINESEPRC.txs`), fail to find it, and **loop on `EXCEPTION_ACCESS_VIOLATION` at ~99%
+CPU** — you get a window with a **title bar but no content**, and no renderer/virtual-desktop
+tweak helps. Trace it with `WINEDEBUG=warn+all` and you'll see the missing-file + access
+violation loop.
+
+Two fixes (do both):
+
+1. **Force a locale whose language files exist** (e.g. French, which the game ships):
+   ```bash
+   wine reg add 'HKCU\Control Panel\International' /v LocaleName /t REG_SZ /d 'fr-FR'    /f
+   wine reg add 'HKCU\Control Panel\International' /v Locale     /t REG_SZ /d '0000040c' /f
+   ```
+2. **Belt-and-suspenders:** create the missing files as copies of an existing language, in
+   `DATA/`: `cp French.tib CHINESEPRC.tib` (and `.txd`, `.txs`).
+
+After this the CPU drops to a healthy ~15–60% and the game window shows content.
+
+## Step 7 — Skip the intro
 
 The 2001 intro video (`DATA/fod.avi`) has no codec under Wine, so the first screen looks
 almost blank. **Press `Esc`** (or click) to skip it and reach the menu. The game plays
@@ -130,7 +151,8 @@ from there.
 |---|---|---|
 | Rendering | `wined3d` `renderer=vulkan` (registry) | Apple's OpenGL is broken; Vulkan→MoltenVK→Metal works |
 | 2D output | cnc-ddraw `ddraw.dll`, `renderer=gdi` | Perfect CPU 2D blitting for a 640×480 DirectDraw game |
-| Audio crash | `WINEDLLOVERRIDES="…;mmdevapi=d;dsound=b"` | Removes the asserting audio module (no sound) |
+| **Crash-loop / empty window** | Force `LocaleName=fr-FR` + create `DATA/CHINESEPRC.*` | Missing language file → `ACCESS_VIOLATION` loop at 99% CPU |
+| Sound | `WINEDEBUG=+mmdevapi,+coreaudio` + DirectSound `HardwareAcceleration=Emulation` | Serialises the audio-init thread race that otherwise asserts |
 | Instruction crash | Modern Wine 11 **wow64** (not `wine32on64`) | Avoids the Rosetta `illegal instruction` on generated code |
 | Intro hang | Press `Esc` at first screen | Intro video has no codec under Wine |
 
